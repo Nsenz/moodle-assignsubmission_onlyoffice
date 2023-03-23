@@ -2,6 +2,7 @@ name: Artifact
 
 on:
   workflow_dispatch:
+  push:
   pull_request:
     types: [opened, reopened]
     branches: [main, master]
@@ -10,26 +11,47 @@ jobs:
   artifact:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout Plugin
         uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
       - name: Get Info
         run: |
           echo "version=$(grep -Eo '[0-9]+(\.[0-9]+)+' CHANGELOG.md | head -n 1)" >> $GITHUB_OUTPUT
         id: info
-      - name: Build Artifact
+      - name: Prepare Plugin
         run: |
           cd ${{ github.workspace }}
           git submodule update --init --recursive
-          mkdir -p ./deploy/moodle-assignsubmission_onlyoffice-v${{ steps.info.outputs.version }}
-          rsync -av --exclude='deploy' ./ ./deploy/moodle-assignsubmission_onlyoffice-v${{ steps.info.outputs.version }}
-          cd ./deploy/moodle-assignsubmission_onlyoffice-v${{ steps.info.outputs.version }}
+          mkdir -p ./moodle-mod_onlyofficeeditor-${{ steps.info.outputs.version }}
+          rsync -av --exclude='moodle-mod_onlyofficeeditor-${{ steps.info.outputs.version }}' ./ ./moodle-mod_onlyofficeeditor-${{ steps.info.outputs.version }}
+          cd ./moodle-mod_onlyofficeeditor-${{ steps.info.outputs.version }}
           rm -rf ./.github/
           rm -rf ./.git/
           rm -rf .gitmodules
           cd ./newdocs
           rm -rf .git
+      - name: Checkout Moodle
+        uses: actions/checkout@v3
+        with:
+          repository: moodle/moodle
+          path: ./moodle
+      - name: Copy Plugin
+        run: |
+          cp -r moodle-mod_onlyofficeeditor-${{ steps.info.outputs.version }} ./moodle/mod/moodle-mod_onlyofficeeditor-${{ steps.info.outputs.version }}
+      - name: Build Plugin
+        run: |
+          cd ./moodle
+          npm install
+          grunt
+      - name: Build Artifact
+        run: |
+          cd ${{ github.workspace }}
+          mkdir -p ./deploy
+          cp -r ./moodle/mod/moodle-mod_onlyofficeeditor-${{ steps.info.outputs.version }} ./deploy
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: moodle-assignsubmission_onlyoffice-v${{ steps.info.outputs.version }}
+          name: moodle-mod_onlyofficeeditor-${{ steps.info.outputs.version }}
           path: deploy
